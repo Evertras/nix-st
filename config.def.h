@@ -97,12 +97,12 @@ unsigned int tabspaces = 8;
 static const char *colorname[] = {
 	/* 8 normal colors */
 	"black",
-	"red3",
-	"green3",
-	"yellow3",
-	"blue2",
-	"magenta3",
-	"cyan3",
+	"${colors.red}",
+	"${colors.green}",
+	"${colors.yellow}",
+	"${colors.blue}",
+	"${colors.magenta}",
+	"${colors.cyan}",
 	"gray90",
 
 	/* 8 bright colors */
@@ -120,8 +120,8 @@ static const char *colorname[] = {
 	/* more colors can be added after 255 to use with DefaultXX */
 	"#cccccc",
 	"#555555",
-	"gray90", /* default foreground colour */
-	"black", /* default background colour */
+	"${colors.foreground}", /* default foreground colour */
+	"${colors.background}", /* default background colour */
 };
 
 
