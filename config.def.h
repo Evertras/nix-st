@@ -5,7 +5,7 @@
  *
  * font: see http://freedesktop.org/software/fontconfig/fontconfig-user.html
  */
-static char *font = "${fontName}:pixelsize=${fontSize}:antialias=true:autohint=true";
+static char *font = "${fontName}:pixelsize=${toString fontSize}:antialias=true:autohint=true";
 static int borderpx = 2;
 
 /*
