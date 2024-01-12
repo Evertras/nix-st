@@ -153,7 +153,7 @@ static unsigned int rows = 24;
 /*
  * Default shape of the mouse cursor
  */
-static char* mouseshape = "xterm";
+static char* mouseshape = "default";
 
 /*
  * Color used to display font attributes when fontconfig selected a font which
