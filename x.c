@@ -1244,7 +1244,7 @@ void
 updatexy()
 {
 	Window child;
-	XTranslateCoordinates(xw,dpy, xw.win, DefaultRootWindow(xw.dpy), 0, 0, &win.x, &win.y, &child);
+	XTranslateCoordinates(xw.dpy, xw.win, DefaultRootWindow(xw.dpy), 0, 0, &win.x, &win.y, &child);
 }
 
 /*
