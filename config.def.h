@@ -9,6 +9,14 @@ static char *font = "${fontName}:pixelsize=${toString fontSize}:antialias=true:a
 static int borderpx = 2;
 
 /*
+ * background image
+ * expects farbfeld format
+ * pseudo transparency fixes coordinates to the screen origin
+ */
+static const char *bgfile = "${bgImage}";
+static const int pseudotransparency = 1;
+
+/*
  * What program is execed by st depends of these precedence rules:
  * 1: program passed with -e
  * 2: scroll and/or utmp

@@ -15,6 +15,7 @@
 #include <X11/Xft/Xft.h>
 #include <X11/XKBlib.h>
 #include <X11/Xcursor/Xcursor.h>
+#include <arpa/inet.h>
 
 char *argv0;
 #include "arg.h"
@@ -82,6 +83,7 @@ typedef XftGlyphFontSpec GlyphFontSpec;
 typedef struct {
 	int tw, th; /* tty width and height */
 	int w, h; /* window width and height */
+	int x, y; /* window location */
 	int ch; /* char height */
 	int cw; /* char width  */
 	int mode; /* window state/mode flags */
@@ -102,6 +104,7 @@ typedef struct {
 		XVaNestedList spotlist;
 	} ime;
 	Draw draw;
+	GC bggc; /* Graphics Context for background */
 	Visual *vis;
 	XSetWindowAttributes attrs;
 	int scr;
@@ -152,6 +155,9 @@ static void ximinstantiate(Display *, XPointer, XPointer);
 static void ximdestroy(XIM, XPointer, XPointer);
 static int xicdestroy(XIC, XPointer, XPointer);
 static void xinit(int, int);
+static void updatexy(void);
+static XImage *loadff(const char*);
+static void bginit();
 static void cresize(int, int);
 static void xresize(int, int);
 static void xhints(void);
@@ -516,6 +522,12 @@ propnotify(XEvent *e)
 			 xpev->atom == clipboard)) {
 		selnotify(e);
 	}
+
+	if (psuedotransparency &&
+			!strncmp(XGetAtomName(xw.dpy, e->xproperty.atom), "_NET_WM_STATE", 13)) {
+		updatexy();
+		redraw();
+	}
 }
 
 void
@@ -546,16 +558,19 @@ selnotify(XEvent *e)
 			return;
 		}
 
-		if (e->type == PropertyNotify && nitems == 0 && rem == 0) {
+		if (e->type == PropertyNotify && nitems == 0 && rem == 0 &&
+				!psuedotransparency) {
 			/*
 			 * If there is some PropertyNotify with no data, then
 			 * this is the signal of the selection owner that all
 			 * data has been transferred. We won't need to receive
 			 * PropertyNotify events anymore.
 			 */
-			MODBIT(xw.attrs.event_mask, 0, PropertyChangeMask);
-			XChangeWindowAttributes(xw.dpy, xw.win, CWEventMask,
+			if (!psuedotransparency) {
+				MODBIT(xw.attrs.event_mask, 0, PropertyChangeMask);
+				XChangeWindowAttributes(xw.dpy, xw.win, CWEventMask,
 					&xw.attrs);
+			}
 		}
 
 		if (type == incratom) {
@@ -852,9 +867,9 @@ xsetcolorname(int x, const char *name)
 void
 xclear(int x1, int y1, int x2, int y2)
 {
-	XftDrawRect(xw.draw,
-			&dc.col[IS_SET(MODE_REVERSE)? defaultfg : defaultbg],
-			x1, y1, x2-x1, y2-y1);
+	if (psuedotransparency)
+		XSetTSOrigin(xw.dpy, cw.bggc, -win.x, -win.y);
+	XFillRectangle(xw.dpy, xw.buf, cw.bggc, x1, y1, x2 - x1, y2 - y1);
 }
 
 void
@@ -1225,6 +1240,99 @@ xinit(int cols, int rows)
 		xsel.xtarget = XA_STRING;
 }
 
+void
+updatexy()
+{
+	Window child;
+	XTranslateCoordinates(xw,dpy, xw.win, DefaultRootWindow(xw.dpy), 0, 0, &win.x, &win.y, &child);
+}
+
+/*
+ * load farbfeld file to XImage
+ */
+XImage*
+loadff(const char *filename)
+{
+	uint32_t i, hdr[4], w, h, size;
+	uint64_t *data;
+	FILE *f = fopen(filename, "rb");
+
+	if (f == NULL) {
+		fprintf(stderr, "Can not open background image file\n");
+		return NULL;
+	}
+
+	if (fread(hdr, sizeof(*hdr), LEN(hdr), f) != LEN(hdr))
+		if (ferror(f)) {
+			fprintf(stderr, "fread:");
+			return NULL;
+		}
+		else {
+			fprintf(stderr, "fread: Unexpected end of file\n");
+			return NULL;
+		}
+
+	if (memcmp("farbfeld", hdr, sizeof("farbfeld") - 1)) {
+		fprintf(stderr, "Invalid magic value\n");
+		return NULL;
+	}
+
+	w = ntohl(hdr[2]);
+	h = ntohl(hdr[3]);
+	size = w * h;
+	data = malloc(size * sizeof(uint64_t));
+
+	if (fread(data, sizeof(uint64_t), size, f) != size)
+		if (ferror(f)) {
+			fprintf(stderr, "fread:");
+			return NULL;
+		}
+		else {
+			fprintf(stderr, "fread: Unexpected end of file\n");
+			return NULL;
+		}
+
+	fclose(f);
+
+	for (i = 0; i < size; i++)
+		data[i] = (data[i] & 0x00000000000000FF) << 16 |
+			  (data[i] & 0x0000000000FF0000) >> 8  |
+			  (data[i] & 0x000000FF00000000) >> 32;
+
+	XImage *xi = XCreateImage(xw.dpy, DefaultVisual(xw.dpy, xw.scr),
+	                            DefaultDepth(xw.dpy, xw.scr), ZPixmap, 0,
+	                            (char *)data, w, h, 32, w * 8);
+	xi->bits_per_pixel = 64;
+	return xi;
+}
+
+/*
+ * initialize background image
+ */
+void
+bginit()
+{
+	XGCValues gcvalues;
+	Drawable bgimg;
+	XImage *bgxi = loadff(bgfile);
+
+	memset(&gcvalues, 0, sizeof(gcvalues));
+	xw.bggc = XCreateGC(xw.dpy, xw.win, 0, &gcvalues);
+	if (!bgxi) return;
+	bgimg = XCreatePixmap(xw.dpy, xw.win, bgxi->width, bgxi->height,
+	                      DefaultDepth(xw.dpy, xw.scr));
+	XPutImage(xw.dpy, bgimg, dc.gc, bgxi, 0, 0, 0, 0, bgxi->width,
+	          bgxi->height);
+	XDestroyImage(bgxi);
+	XSetTile(xw.dpy, xw.bggc, bgimg);
+	XSetFillStyle(xw.dpy, xw.bggc, FillTiled);
+	if (pseudotransparency) {
+		updatexy();
+		MODBIT(xw.attrs.event_mask, 1, PropertyChangeMask);
+		XChangeWindowAttributes(xw.dpy, xw.win, CWEventMask, &xw.attrs);
+	}
+}
+
 int
 xmakeglyphfontspecs(XftGlyphFontSpec *specs, const Glyph *glyphs, int len, int x, int y)
 {
@@ -1461,7 +1569,10 @@ xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, i
         if (winy + win.ch >= borderpx + win.th)
             xclear(winx, winy + win.ch, winx + width, win.h);
         /* Fill the background */
-        XftDrawRect(xw.draw, bg, winx, winy, width, win.ch);
+		if (bg == &dc.col[defaultbg])
+			xclear(winx, winy, winx + width, winy + win.ch);
+		else
+			XftDrawRect(xw.draw, bg, winx, winy, width, win.ch);
     }
 
     if (dmode & DRAW_FG) {
@@ -1887,8 +1998,17 @@ cmessage(XEvent *e)
 void
 resize(XEvent *e)
 {
-	if (e->xconfigure.width == win.w && e->xconfigure.height == win.h)
-		return;
+	if (pseudotransparency) {
+		if (e->xconfigure.width == win.w &&
+		    e->xconfigure.height == win.h &&
+		    e->xconfigure.x == win.x && e->xconfigure.y == win.y)
+			return;
+		updatexy();
+	} else {
+		if (e->xconfigure.width == win.w &&
+		    e->xconfigure.height == win.h)
+			return;
+	}
 
 	cresize(e->xconfigure.width, e->xconfigure.height);
 }
@@ -2073,6 +2193,7 @@ run:
 	rows = MAX(rows, 1);
 	tnew(cols, rows);
 	xinit(cols, rows);
+	bginit();
 	xsetenv();
 	selinit();
 	run();
