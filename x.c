@@ -868,8 +868,8 @@ void
 xclear(int x1, int y1, int x2, int y2)
 {
 	if (pseudotransparency)
-		XSetTSOrigin(xw.dpy, cw.bggc, -win.x, -win.y);
-	XFillRectangle(xw.dpy, xw.buf, cw.bggc, x1, y1, x2 - x1, y2 - y1);
+		XSetTSOrigin(xw.dpy, xw.bggc, -win.x, -win.y);
+	XFillRectangle(xw.dpy, xw.buf, xw.bggc, x1, y1, x2 - x1, y2 - y1);
 }
 
 void
