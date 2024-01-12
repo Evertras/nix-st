@@ -523,7 +523,7 @@ propnotify(XEvent *e)
 		selnotify(e);
 	}
 
-	if (psuedotransparency &&
+	if (pseudotransparency &&
 			!strncmp(XGetAtomName(xw.dpy, e->xproperty.atom), "_NET_WM_STATE", 13)) {
 		updatexy();
 		redraw();
@@ -559,14 +559,14 @@ selnotify(XEvent *e)
 		}
 
 		if (e->type == PropertyNotify && nitems == 0 && rem == 0 &&
-				!psuedotransparency) {
+				!pseudotransparency) {
 			/*
 			 * If there is some PropertyNotify with no data, then
 			 * this is the signal of the selection owner that all
 			 * data has been transferred. We won't need to receive
 			 * PropertyNotify events anymore.
 			 */
-			if (!psuedotransparency) {
+			if (!pseudotransparency) {
 				MODBIT(xw.attrs.event_mask, 0, PropertyChangeMask);
 				XChangeWindowAttributes(xw.dpy, xw.win, CWEventMask,
 					&xw.attrs);
@@ -867,7 +867,7 @@ xsetcolorname(int x, const char *name)
 void
 xclear(int x1, int y1, int x2, int y2)
 {
-	if (psuedotransparency)
+	if (pseudotransparency)
 		XSetTSOrigin(xw.dpy, cw.bggc, -win.x, -win.y);
 	XFillRectangle(xw.dpy, xw.buf, cw.bggc, x1, y1, x2 - x1, y2 - y1);
 }
